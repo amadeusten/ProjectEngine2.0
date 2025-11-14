@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale-1.0">
+    <title>Estimate SO19127</title>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            font-weight: 400; 
+            color: #374151; /* text-gray-700 */
+        }
+
+        /* --- APPS SCRIPT TEMPLATES (FOR YOUR REFERENCE) --- */
+        /* Your Apps Script will build HTML strings based on these templates 
+        and inject them into the #line-items-tbody element.
+
+        ** Category Header Row Template: **
+        <tr class="category-header-row">
+            <td colspan="5" class="pt-6 pb-2 text-sm font-semibold text-gray-900">
+                [Category Name]
+            </td>
+        </tr>
+
+        ** Data Row Template: **
+        <tr class="item-row">
+            <td class="p-2 item-id">[Item ID]</td>
+            <td class="p-2 item-desc">[Description]</td>
+            <td class="p-2 text-right item-qty">[Quantity]</td>
+            <td class="p-2 text-right item-unitprice">[Unit Price]</td>
+            <td class="p-2 text-right font-medium text-gray-800 item-amount">[Amount]</td>
+        </tr>
+        
+        */
+        /* --- END OF TEMPLATES --- */
+
+    </style>
+</head>
+<body class="bg-white">
+
+    <div class="max-w-5xl mx-auto p-8 md:p-12">
+
+        <header class="flex justify-between items-start mb-12">
+            <div class="text-sm">
+                <dl class="grid grid-cols-2 gap-x-[4.5rem] gap-y-1">
+                    <dt class="font-medium text-gray-600">Estimate Number</dt>
+                    <dd class="text-gray-800 font-medium" id="estimate_number_val">SO19127LV</dd>
+                    
+                    <dt class="font-medium text-gray-600">Date of issue</dt>
+                    <dd class="text-gray-800" id="date_of_issue_val">August 25, 2025</dd>
+                    
+                    <dt class="font-medium text-gray-600">Valid for</dt>
+                    <dd class="text-gray-800" id="valid_for_val">15 days</dd>
+                    
+                    <dt class="font-medium text-gray-600">Project</dt>
+                    <dd class="text-gray-800" id="project_val">19127LV</dd>
+                </dl>
+                <div class="mt-4">
+                    <span class="font-medium text-gray-600">Confirm by date:</span>
+                    <span class="font-bold text-gray-900 ml-12" id="confirm_by_date_val">August 10, 2025</span>
+                </div>
+            </div>
+            
+            <div class="text-right">
+                <div id="logo-placeholder" class="w-32 h-12 bg-gray-200 rounded flex items-center justify-center text-sm text-gray-500">
+                    SVG Logo
+                </div>
+            </div>
+        </header>
+
+        <section class="grid grid-cols-2 gap-12 my-12">
+            <div>
+                <h3 class="text-sm font-semibold uppercase text-gray-500 tracking-wider">Bill to</h3>
+                <div id="bill_to_details" class="mt-2 text-gray-700 not-italic leading-relaxed">
+                    <span class="font-medium text-gray-800" id="bill_to_name">Company Name</span><br>
+                    6716 NE 4th Avenue<br>
+                    Miami, FL 33138<br>
+                    United States
+                </div>
+            </div>
+
+            <div>
+                <h3 class="text-sm font-semibold uppercase text-gray-500 tracking-wider">Ship to</h3>
+                <div id="ship_to_details" class="mt-2 text-gray-700 not-italic leading-relaxed">
+                    <span class="font-medium text-gray-800" id="ship_to_name">Company Name</span><br>
+                    6716 NE 4th Avenue<br>
+                    Miami, FL 33138<br>
+                    United States
+                </div>
+            </div>
+        </section>
+        
+        <section class="my-12">
+            <h1 class="text-3xl font-bold text-gray-900" id="estimate_title">Estimate # SO19127</h1>
+        </section>
+
+        <section class="mt-8">
+            <table class="w-full table-auto text-sm">
+                <thead>
+                    <tr>
+                        <th class="p-2 pb-3 text-left text-xs font-semibold uppercase text-gray-500 tracking-wider">ID</th>
+                        <th class="w-1/2 p-2 pb-3 text-left text-xs font-semibold uppercase text-gray-500 tracking-wider">Description</th>
+                        <th class="p-2 pb-3 text-right text-xs font-semibold uppercase text-gray-500 tracking-wider">Quantity</th>
+                        <th class="p-2 pb-3 text-right text-xs font-semibold uppercase text-gray-500 tracking-wider">Unit Price</th>
+                        <th class="p-2 pb-3 text-right text-xs font-semibold uppercase text-gray-500 tracking-wider">Amount</th>
+                    </tr>
+                </thead>
+                <tbody class="text-gray-700" id="line-items-tbody">
+                    </tbody>
+            </table>
+        </section>
+        <section class="flex justify-end mt-12">
+            <div class="w-full max-w-xs space-y-3 text-sm">
+                <div class="flex justify-between">
+                    <span class="text-gray-600">Subtotal</span>
+                    <span class="font-medium text-gray-800" id="subtotal_val">$ 12,000.00</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-gray-600">Tax</span>
+                    <span class="font-medium text-gray-800" id="tax_val">$ 12,000.00</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-gray-600">CC Fee</span>
+                    <span class="font-medium text-gray-800" id="cc_fee_val">$ 12,000.00</span>
+                </div>
+                <div class="flex justify-between pt-4 mt-2 border-t border-gray-200">
+                    <span class="text-base font-bold text-gray-900">Total Amount</span>
+                    <span class="text-base font-bold text-gray-900" id="total_amount_val">$ 12,000.00</span>
+                </div>
+            </div>
+        </section>
+
+        <footer class="text-sm mt-24 pt-6 border-t border-gray-200">
+            <div class="flex justify-between items-center text-gray-600">
+                <span class="text-xs">NICH LLC, 6716 NE 4th Avenue Miami, FL 33138 | info@nichbranding.com (305) 747-1610</span>
+                <span class="text-xs font-medium" id="page_footer_val">Page 1 / 2</span>
+            </div>
+        </footer>
+
+    </div>
+
+</body>
+</html>
