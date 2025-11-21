@@ -990,79 +990,226 @@ const nichDocs = {
    * @param {Object} formData - The printing form data
    * @returns {Object} Calculated costs
    */
-  calculatePrintingCosts: function(formData) {
-    // This mirrors the calculation logic from PrintingIndex.html
-    const costs = {
-      materialCost: 0,
-      laminationCost: 0,
-      inkCost: 0,
-      cuttingCost: 0,
-      equipmentCost: 0,
-      designCost: 0,
-      operatorCost: 0
-    };
+  /**
+ * Calculates printing costs based on form data (mirrors PrintingIndex.html logic)
+ * @param {Object} formData - The printing form data
+ * @returns {Object} Calculated costs
+ */
+calculatePrintingCosts: function(formData) {
+  const costs = {
+    materialCost: 0,
+    laminationCost: 0,
+    inkCost: 0,
+    cuttingCost: 0,
+    equipmentCost: 0,
+    designCost: 0,
+    operatorCost: 0
+  };
+  
+  // Extract form data with defaults
+  const qty = Number(formData.quantity) || 0;
+  const artWidth = Number(formData.width) || 0;
+  const artHeight = Number(formData.height) || 0;
+  const materialName = formData.materialName || '';
+  
+  if (!materialName || qty <= 0 || artWidth <= 0 || artHeight <= 0) {
+    return costs;
+  }
+  
+  const bleed = 0.25;
+  const spacing = 0.25;
+  const artWidthTotal = artWidth + bleed;
+  const artHeightTotal = artHeight + bleed;
+  
+  // Look up material from Materials sheet
+  const material = this.getMaterialByName(materialName);
+  
+  if (!material) {
+    console.warn('Material not found:', materialName);
+    return costs;
+  }
+  
+  let totalLinearFeet = 0;
+  
+  // Calculate material cost based on type (ROLL vs SHEET)
+  if (material.type === 'ROLL') {
+    const rollWidth = material.width;
     
-    // Extract form data with defaults
-    const qty = Number(formData.quantity) || 0;
-    const artWidth = Number(formData.width) || 0;
-    const artHeight = Number(formData.height) || 0;
-    const bleed = 0.25;
-    const spacing = 0.25;
-    const artWidthTotal = artWidth + bleed;
-    const artHeightTotal = artHeight + bleed;
-    
-    // Calculate material cost (simplified - would need material data)
-    // For now, we'll extract it if it's been pre-calculated in the total
-    // This is a placeholder - actual implementation would need material lookup
-    
-    // Calculate based on total artwork square footage
-    const singlePieceSqFt = (artWidthTotal * artHeightTotal) / 144;
-    let totalArtworkSqFt = singlePieceSqFt * qty;
-    if (formData.doubleSided) {
-      totalArtworkSqFt *= 2;
+    // Check if artwork fits on roll
+    if (artWidthTotal > rollWidth && artHeightTotal > rollWidth) {
+      console.warn('Artwork is wider than the selected roll:', materialName);
+      return costs;
     }
     
-    const totalArtworkPerimeter = (artWidth * 2 + artHeight * 2) * qty;
+    const linFtCost = material.costLinFt;
     
-    // Calculate time-based costs
-    const printTimeHours = (totalArtworkSqFt / 0.83) / 60;
-    let cutTimeHours = (totalArtworkPerimeter / 120) / 60;
-    if (formData.complexShape) {
-      cutTimeHours *= 1.5;
+    // Calculate how many columns fit across the roll width
+    const colsPortrait = Math.floor((rollWidth + spacing) / (artWidthTotal + spacing));
+    const colsLandscape = Math.floor((rollWidth + spacing) / (artHeightTotal + spacing));
+    let numColumns = Math.max(colsPortrait, colsLandscape, 1);
+    
+    // Determine layout row height based on orientation
+    let layoutRow = artHeightTotal;
+    if (colsLandscape > colsPortrait) {
+      layoutRow = artWidthTotal;
     }
-    const ripTimeHours = (totalArtworkSqFt / 20.52) / 60;
-    const printComputeTimeHours = (totalArtworkSqFt / 6.2) / 60;
     
-    // Design time
-    const designTimeInHours = this.getTimeInHours(formData.designTime, formData.designTimeUnit);
-    const laborDecalsTimeInHours = this.getTimeInHours(formData.laborDecalsTime, formData.laborDecalsTimeUnit);
-    const laborFinishingTimeInHours = this.getTimeInHours(formData.laborFinishingTime, formData.laborFinishingTimeUnit);
-    const laborInstallingTimeInHours = this.getTimeInHours(formData.laborInstallingTime, formData.laborInstallingTimeUnit);
+    // Calculate rows needed
+    const numRows = Math.ceil(qty / numColumns);
     
-    const manualOperatorTimeInHours = laborDecalsTimeInHours + laborFinishingTimeInHours + laborInstallingTimeInHours;
-    const totalProjectRunTimeHours = printTimeHours + cutTimeHours + ripTimeHours + printComputeTimeHours;
+    // Calculate total linear inches and convert to feet
+    const totalLinearInches = (numRows * layoutRow) + ((numRows - 1) * spacing);
+    totalLinearFeet = totalLinearInches / 12;
     
-    // Calculate costs
-    costs.inkCost = totalArtworkSqFt * 0.165;
-    costs.cuttingCost = cutTimeHours * 25.00;
+    // Add 2.5 feet buffer and calculate cost
+    costs.materialCost = (totalLinearFeet + 2.5) * linFtCost;
     
-    const baseDesignCost = (totalArtworkSqFt / 25) * 0.0625 * 60.00;
-    const manualDesignCost = designTimeInHours * 60.00;
-    costs.designCost = baseDesignCost + manualDesignCost;
+  } else if (material.type === 'SHEET') {
+    const sheetWidth = material.width;
+    const sheetHeight = material.height;
+    const sheetCost = material.costSheet;
     
-    if (formData.lamination) {
-      // Simplified - would need material type check
+    // Check if artwork fits on sheet in either orientation
+    const artFitsPortrait = (artWidthTotal <= sheetWidth && artHeightTotal <= sheetHeight);
+    const artFitsLandscape = (artWidthTotal <= sheetHeight && artHeightTotal <= sheetWidth);
+    
+    if (!artFitsPortrait && !artFitsLandscape) {
+      console.warn('Artwork is larger than the selected sheet:', materialName);
+      return costs;
+    }
+    
+    // Calculate pieces per sheet for both orientations
+    const perSheet1 = artFitsPortrait 
+      ? Math.floor((sheetWidth + spacing) / (artWidthTotal + spacing)) * 
+        Math.floor((sheetHeight + spacing) / (artHeightTotal + spacing)) 
+      : 0;
+    const perSheet2 = artFitsLandscape 
+      ? Math.floor((sheetWidth + spacing) / (artHeightTotal + spacing)) * 
+        Math.floor((sheetHeight + spacing) / (artWidthTotal + spacing)) 
+      : 0;
+    
+    const piecesPerSheet = Math.max(perSheet1, perSheet2, 1);
+    const totalSheets = Math.ceil(qty / piecesPerSheet);
+    
+    // Calculate cost with half-sheet minimum
+    let calculatedMaterialCost = totalSheets * sheetCost;
+    const halfSheetCost = sheetCost * 0.5;
+    costs.materialCost = Math.max(calculatedMaterialCost, halfSheetCost);
+  }
+  
+  // Calculate total artwork square footage
+  const singlePieceSqFt = (artWidthTotal * artHeightTotal) / 144;
+  let totalArtworkSqFt = singlePieceSqFt * qty;
+  if (formData.doubleSided) {
+    totalArtworkSqFt *= 2;
+  }
+  
+  // Calculate total artwork perimeter for cutting
+  const totalArtworkPerimeter = (artWidth * 2 + artHeight * 2) * qty;
+  
+  // Calculate time-based values
+  const printTimeHours = (totalArtworkSqFt / 0.83) / 60;
+  let cutTimeHours = (totalArtworkPerimeter / 120) / 60;
+  if (formData.complexShape) {
+    cutTimeHours *= 1.5;
+  }
+  const ripTimeHours = (totalArtworkSqFt / 20.52) / 60;
+  const printComputeTimeHours = (totalArtworkSqFt / 6.2) / 60;
+  
+  // Calculate labor times
+  const designTimeInHours = this.getTimeInHours(formData.designTime, formData.designTimeUnit);
+  const laborDecalsTimeInHours = this.getTimeInHours(formData.laborDecalsTime, formData.laborDecalsTimeUnit);
+  const laborFinishingTimeInHours = this.getTimeInHours(formData.laborFinishingTime, formData.laborFinishingTimeUnit);
+  const laborInstallingTimeInHours = this.getTimeInHours(formData.laborInstallingTime, formData.laborInstallingTimeUnit);
+  
+  const manualOperatorTimeInHours = laborDecalsTimeInHours + laborFinishingTimeInHours + laborInstallingTimeInHours;
+  const totalProjectRunTimeHours = printTimeHours + cutTimeHours + ripTimeHours + printComputeTimeHours;
+  
+  // Calculate costs
+  costs.inkCost = totalArtworkSqFt * 0.165;
+  costs.cuttingCost = cutTimeHours * 25.00;
+  
+  // Design cost: base + manual
+  const baseDesignCost = (totalArtworkSqFt / 25) * 0.0625 * 60.00;
+  const manualDesignCost = designTimeInHours * 60.00;
+  costs.designCost = baseDesignCost + manualDesignCost;
+  
+  // Lamination cost
+  if (formData.lamination) {
+    if (material.type === 'ROLL') {
+      costs.laminationCost = totalLinearFeet * 1.02;
+    } else {
       costs.laminationCost = totalArtworkSqFt * 0.2267;
     }
+  }
+  
+  // Equipment and operator costs
+  costs.equipmentCost = totalProjectRunTimeHours * 4.95;
+  costs.operatorCost = (totalProjectRunTimeHours + manualOperatorTimeInHours) * 28.00;
+  
+  return costs;
+},
+
+/**
+ * Looks up a material by name from the Materials sheet
+ * @param {string} materialName - Name of the material to find
+ * @returns {Object|null} Material object with type, width, height, costSheet, costLinFt
+ */
+getMaterialByName: function(materialName) {
+  const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = spreadsheet.getSheetByName('Materials');
+  
+  if (!sheet) {
+    console.error('Materials sheet not found');
+    return null;
+  }
+  
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) {
+    return null;
+  }
+  
+  const data = sheet.getRange('A2:P' + lastRow).getValues();
+  
+  for (let row of data) {
+    const name = row[1]; // Column B
+    const primaryCategory = row[4]; // Column E
     
-    costs.equipmentCost = totalProjectRunTimeHours * 4.95;
-    costs.operatorCost = (totalProjectRunTimeHours + manualOperatorTimeInHours) * 28.00;
-    
-    // Material cost would need to be calculated based on material type and dimensions
-    // For now, we'll leave it at 0 unless we can extract it from the total
-    
-    return costs;
-  },
+    // Check if this is a PRINT material with matching name
+    if (name && name.toString().trim() === materialName && 
+        primaryCategory && primaryCategory.toString().toUpperCase().includes('PRINT')) {
+      
+      const type = row[6] ? row[6].toString().trim().toUpperCase() : 'SHEET'; // Column G
+      const width = parseFloat(row[7]) || 0; // Column H (inches)
+      const length = parseFloat(row[8]) || 0; // Column I (feet for ROLL, inches for SHEET)
+      let unitCost = row[9]; // Column J
+      
+      // Parse unit cost
+      if (unitCost && typeof unitCost === 'string') {
+        unitCost = parseFloat(unitCost.replace(/[^0-9.-]+/g, '')) || 0;
+      } else if (typeof unitCost !== 'number') {
+        unitCost = 0;
+      }
+      
+      // Calculate cost per linear foot for ROLL materials
+      let costLinFt = 0;
+      if (type === 'ROLL' && length > 0) {
+        costLinFt = unitCost / length;
+      }
+      
+      return {
+        name: name.toString().trim(),
+        type: type,
+        width: width,
+        height: length, // For SHEET this is height in inches, for ROLL this is length in feet
+        costSheet: unitCost,
+        costLinFt: costLinFt
+      };
+    }
+  }
+  
+  return null;
+},
   
   /**
    * Helper function to convert time to hours
