@@ -1482,34 +1482,37 @@ getMaterialByName: function(materialName) {
   },
   
   /**
-   * Collects printing BOM items from PrintingLog
-   * @returns {Array} Array of printing line items
-   */
-  collectPrintingBOM: function() {
-    const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
-    const logSheet = spreadsheet.getSheetByName('PrintingLog');
+ * Collects printing BOM items from PrintingLog
+ * @returns {Array} Array of printing line items
+ */
+collectPrintingBOM: function() {
+  const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+  const logSheet = spreadsheet.getSheetByName('PrintingLog');
+  
+  if (!logSheet) {
+    return [];
+  }
+  
+  const materialMap = new Map(); // Key: material name, Value: {quantity, unitOfMeasure, vendor}
+  
+  // Accumulators for labor hours
+  let totalOperatorHours = 0;
+  let totalDesignHours = 0;
+  
+  const dataRange = logSheet.getDataRange();
+  const values = dataRange.getValues();
+  
+  // Skip header row
+  for (let i = 1; i < values.length; i++) {
+    const formDataJson = values[i][3];
+    if (!formDataJson) continue;
     
-    if (!logSheet) {
-      return [];
-    }
-    
-    const materialMap = new Map(); // Key: material name, Value: {quantity, unitOfMeasure, vendor}
-    
-    const dataRange = logSheet.getDataRange();
-    const values = dataRange.getValues();
-    
-    // Skip header row
-    for (let i = 1; i < values.length; i++) {
-      const formDataJson = values[i][3];
-      if (!formDataJson) continue;
+    try {
+      const formData = JSON.parse(formDataJson);
       
-      try {
-        const formData = JSON.parse(formDataJson);
-        
-        // Extract material information from printing data
-        const materialName = formData.materialName;
-        if (!materialName) continue;
-        
+      // Extract material information from printing data
+      const materialName = formData.materialName;
+      if (materialName) {
         // Calculate material quantity based on form data
         const materialInfo = this.calculatePrintingMaterialQuantity(formData);
         
@@ -1530,15 +1533,103 @@ getMaterialByName: function(materialName) {
             });
           }
         }
-        
-      } catch (error) {
-        console.error('Error parsing PrintingLog data:', error);
       }
+      
+      // Calculate labor hours for this entry
+      const laborHours = this.calculatePrintingLaborHours(formData);
+      totalOperatorHours += laborHours.operatorHours;
+      totalDesignHours += laborHours.designHours;
+      
+    } catch (error) {
+      console.error('Error parsing PrintingLog data:', error);
     }
-    
-    // Convert map to array
-    return Array.from(materialMap.values());
-  },
+  }
+  
+  // Convert material map to array
+  const items = Array.from(materialMap.values());
+  
+  // Add labor line items if there are any hours
+  if (totalOperatorHours > 0) {
+    items.push({
+      description: 'Operator Labor',
+      quantity: Math.round(totalOperatorHours * 100) / 100, // Round to 2 decimal places
+      unitOfMeasure: 'Hours',
+      vendor: '',
+      status: ''
+    });
+  }
+  
+  if (totalDesignHours > 0) {
+    items.push({
+      description: 'Design Labor',
+      quantity: Math.round(totalDesignHours * 100) / 100, // Round to 2 decimal places
+      unitOfMeasure: 'Hours',
+      vendor: '',
+      status: ''
+    });
+  }
+  
+  return items;
+},
+
+/**
+ * Calculates labor hours for a printing item
+ * @param {Object} formData - Printing form data
+ * @returns {Object} Labor hours breakdown
+ */
+calculatePrintingLaborHours: function(formData) {
+  const qty = Number(formData.quantity) || 0;
+  const artWidth = Number(formData.width) || 0;
+  const artHeight = Number(formData.height) || 0;
+  
+  if (qty <= 0 || artWidth <= 0 || artHeight <= 0) {
+    return { operatorHours: 0, designHours: 0 };
+  }
+  
+  const bleed = 0.25;
+  const artWidthTotal = artWidth + bleed;
+  const artHeightTotal = artHeight + bleed;
+  
+  // Calculate total artwork square footage
+  const singlePieceSqFt = (artWidthTotal * artHeightTotal) / 144;
+  let totalArtworkSqFt = singlePieceSqFt * qty;
+  if (formData.doubleSided) {
+    totalArtworkSqFt *= 2;
+  }
+  
+  // Calculate total artwork perimeter for cutting
+  const totalArtworkPerimeter = (artWidth * 2 + artHeight * 2) * qty;
+  
+  // Calculate time-based values
+  const printTimeHours = (totalArtworkSqFt / 0.83) / 60;
+  let cutTimeHours = (totalArtworkPerimeter / 120) / 60;
+  if (formData.complexShape) {
+    cutTimeHours *= 1.5;
+  }
+  const ripTimeHours = (totalArtworkSqFt / 20.52) / 60;
+  const printComputeTimeHours = (totalArtworkSqFt / 6.2) / 60;
+  
+  // Calculate manual labor times
+  const laborDecalsTimeInHours = this.getTimeInHours(formData.laborDecalsTime, formData.laborDecalsTimeUnit);
+  const laborFinishingTimeInHours = this.getTimeInHours(formData.laborFinishingTime, formData.laborFinishingTimeUnit);
+  const laborInstallingTimeInHours = this.getTimeInHours(formData.laborInstallingTime, formData.laborInstallingTimeUnit);
+  
+  const manualOperatorTimeInHours = laborDecalsTimeInHours + laborFinishingTimeInHours + laborInstallingTimeInHours;
+  const totalProjectRunTimeHours = printTimeHours + cutTimeHours + ripTimeHours + printComputeTimeHours;
+  
+  // Total operator hours = automated time + manual time
+  const operatorHours = totalProjectRunTimeHours + manualOperatorTimeInHours;
+  
+  // Calculate design hours
+  const designTimeInHours = this.getTimeInHours(formData.designTime, formData.designTimeUnit);
+  const baseDesignHours = (totalArtworkSqFt / 25) * 0.0625; // Base design time in hours
+  const designHours = baseDesignHours + designTimeInHours;
+  
+  return {
+    operatorHours: operatorHours,
+    designHours: designHours
+  };
+},
   
   /**
    * Calculates material quantity for a printing item
